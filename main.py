@@ -42,7 +42,7 @@ class EPUB:
     def _makePageHTML(self, title, content):
 
         html = '<?xml version="1.0" encoding="UTF-8"?>\n'
-        html += '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n'
+        html += '<!DOCTYPE html>\n'
         html += '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="' + self.language + '">\n'
         html += '<head>\n'
         html += '<title>' + title + '</title>\n'
@@ -118,11 +118,17 @@ hr
 margin: 1.5em 0;
 }
 
-div.toc-item
+.toc-list
+{
+list-style: none;
+}
+
+.toc-item
 {
 margin-left: 0.5em;
 margin-top: 0.5em;
 margin-bottom: 0.5em;
+text-ident: 0;
 }
         '''
 
@@ -140,20 +146,24 @@ margin-bottom: 0.5em;
             return
 
         toc_html = '<?xml version="1.0" encoding="UTF-8"?>\n'
-        toc_html += '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n'
-        toc_html += '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="' + self.language + '">\n'
+        toc_html += '<!DOCTYPE html>\n'
+        toc_html += '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="' + self.language + '" xmlns:epub="http://www.idpf.org/2007/ops">\n'
         toc_html += '<head>\n'
         toc_html += '<title>' + title + '</title>\n'
         toc_html += '<link rel="stylesheet" type="text/css" href="../Styles/stylesheet.css" />\n'
         toc_html += '</head>\n'
         toc_html += '<body>\n'
         toc_html += '<h1>' + title + '</h1>\n'
+        toc_html += '<nav epub:type="toc">\n'
+        toc_html += '<ol class="toc-list">\n'
         for title, filename in self.toc:
             if not title:
                 continue
-            toc_html += '<div class="toc-item">\n'
+            toc_html += '<li class="toc-item">\n'
             toc_html += '<a href="' + os.path.basename(filename) + '">' + title + '</a>\n'
-            toc_html += '</div>\n'
+            toc_html += '</li>\n'
+        toc_html += '</ol>\n'
+        toc_html += '</nav>\n'
         toc_html += '</body>\n'
         toc_html += '</html>\n'
 
@@ -189,23 +199,37 @@ margin-bottom: 0.5em;
             return 'ncx'
         return filename.replace('/', '_').replace('.', '_')
 
+    def _makeItemProperties(self, item):
+        if item == 'Text/toc.xhtml':
+            return ' properties="nav"'
+        if item == 'Images/cover.png':
+            return ' properties="cover-image"'
+        if item[-5:] == 'xhtml' and '<svg' in self.files[item].decode('utf-8'):
+            return ' properties="svg"'
+        return ""
+
+
     def makeOPF(self):
         self.opf = '<?xml version="1.0" encoding="UTF-8"?>\n'
         self.opf += '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="BookId">\n'
         self.opf += '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">\n'
         self.opf += '<dc:title>' + self.title + '</dc:title>\n'
-        self.opf += '<dc:creator opf:role="aut">' + self.author + '</dc:creator>\n'
-        self.opf += '<dc:date opf:event="publication">' + datetime.datetime.strftime(datetime.datetime.fromtimestamp(self.publication_date), '%Y-%m-%d') + '</dc:date>\n'
-        self.opf += '<dc:identifier id="BookId" opf:scheme="UUID">urn:uuid:' + self.uuid + '</dc:identifier>\n'
+        self.opf += '<meta property="role" refines="#author" scheme="marc:relators">aut</meta>'
+        self.opf += '<dc:creator id="author">' + self.author + '</dc:creator>\n'
+        self.opf += '<dc:date>' + datetime.datetime.strftime(datetime.datetime.fromtimestamp(self.publication_date), '%Y-%m-%d') + 'T15:00:00Z</dc:date>\n'
+        self.opf += '<meta property="dcterms:modified">' + datetime.datetime.strftime(datetime.datetime.fromtimestamp(self.publication_date), '%Y-%m-%d') + 'T15:00:00Z</meta>\n'
+        self.opf += '<dc:identifier id="BookId">urn:uuid:' + self.uuid + '</dc:identifier>\n'
         self.opf += '<dc:language>' + self.language + '</dc:language>\n'
         self.opf += '<dc:publisher>' + self.publisher + '</dc:publisher>\n'
         self.opf += '<dc:source>' + self.url + '</dc:source>\n'
+        self.opf += '<dc:identifier id="source-id">url:' + self.url + '</dc:identifier>\n'
         if self.cover:
             self.opf += '<meta name="cover" content="' + self._makeID(self.cover) + '"/>\n'
         self.opf += '</metadata>\n'
         self.opf += '<manifest>\n'
         for file in self.files.keys():
-            self.opf += '<item id="' + self._makeID(file) + '" href="' + file + '" media-type="' + self._mediaType(file) + '"/>\n'
+            properties = self._makeItemProperties(file)
+            self.opf += '<item id="' + self._makeID(file) + '" href="' + file + '" media-type="' + self._mediaType(file) + '"' + properties + '/>\n'
         self.opf += '</manifest>\n'
         if self.vertical:
             self.opf += '<spine toc="ncx" page-progression-direction="rtl">\n'
@@ -220,7 +244,7 @@ margin-bottom: 0.5em;
 
     def makeNCX(self):
         self.ncx = '<?xml version="1.0" encoding="UTF-8"?>\n'
-        self.ncx += '<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">\n'
+        # self.ncx += '<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">\n'
         self.ncx += '<ncx xml:lang="en" xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n'
         self.ncx += '<head>\n'
         self.ncx += '<meta name="dtb:uid" content="urn:uuid:' + self.uuid + '"/>\n'
@@ -266,7 +290,7 @@ margin-bottom: 0.5em;
         self.cover = 'Images/cover.png'
 
         self.files['Text/cover.xhtml'] = '''<?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <title>Cover</title>
@@ -352,9 +376,9 @@ def main(argv):
     arasuji = '''
     <p>品名：{}</p>
     <p>作者：{}</p>
-    <p class="separator">&nbsp;</p>
+    <p class="separator">&#160;</p>
     <p>{}</p>
-    <p class="separator">&nbsp;</p>
+    <p class="separator">&#160;</p>
     <p>最終更新日：{}</p>
     <p>読み取り日：{}</p>
     '''.format(title, author, summary, jaconv.h2z(datetime.datetime.strftime(datetime.datetime.fromtimestamp(last_update), '%Y年%m月%d日'), digit=True), jaconv.h2z(datetime.datetime.strftime(datetime.datetime.now(), '%Y年%m月%d日'), digit=True))
