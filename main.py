@@ -96,7 +96,6 @@ page-break-before: always;
 
 p
 {
-text-indent: 1.25em;
 margin: 0;
 text-align: justify;
 }
@@ -342,9 +341,16 @@ def parse_chapter(chapter_url):
         html = response.read().decode('utf-8')
     soup = bs4.BeautifulSoup(html, 'html.parser')
     chapter_title = soup.find('p', class_='novel_subtitle').string
-    chapter_content = soup.find('div', id='novel_honbun').decode_contents()
+    chapter_content = parse_content(soup.find('div', id='novel_honbun'))
     time.sleep(1)
     return chapter_title, chapter_content
+
+
+def parse_content(chapter_soup):
+    for p in chapter_soup.find_all('p'):
+        if p.string and not p.string[0] == '「' and not p.string[0] == "　":
+            p.insert(0, "　")
+    return chapter_soup.decode_contents()
 
 
 def main(argv):
